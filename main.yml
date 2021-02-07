@@ -1,0 +1,106 @@
+--- 
+- name: install grocy 
+  hosts: all
+  become: yes
+  become_user: root
+  tasks:
+
+  - name: upgrade system
+    apt:
+      update_cache: yes
+      upgrade: yes
+
+  - name: Basic bootstrap tools
+    apt:
+      name: "{{ item }}"
+    loop:
+    - vim
+    - lsb-release
+    - apt-transport-https
+    - ca-certificates
+
+  - name: get release
+    shell: lsb_release -sc
+    register: release
+
+  - name: Add key for php
+    ansible.builtin.apt_key:
+      url: https://packages.sury.org/php/apt.gpg 
+      state: present
+
+  - name: Add repo for php
+    ansible.builtin.apt_repository:
+      repo: "deb https://packages.sury.org/php/ {{ release.stdout }} main"
+      state: present
+
+  - name: Install nginx 
+    apt:
+      name: "nginx"
+
+  - name: Start nginx
+    ansible.builtin.systemd:
+      state: started
+      enabled: true
+      name: nginx
+
+  - name: Install php7.4
+    apt:
+      name: "{{ item }}"
+    loop:
+    - php7.4-fpm
+    - php7.4-curl
+    - php7.4-gd
+    - php7.4-intl
+    - php7.4-mbstring
+    - php7.4-mysql
+    - php7.4-imap
+    - php7.4-opcache
+    - php7.4-sqlite3
+    - php7.4-xml
+    - php7.4-xmlrpc
+    - php7.4-zip
+    - php7.4-bcmath
+    - php7.4
+    - php-apcu
+
+
+  - name: Create grocy dir
+    ansible.builtin.file:
+      path: /opt/grocy
+      state: directory
+      mode: '0755'
+
+  - name: Download grocy
+    get_url:
+      url: https://github.com/grocy/grocy/releases/download/v3.0.1/grocy_3.0.1.zip
+      dest: /tmp/grocy.zip
+
+  - name: Unzip grocy
+    shell: unzip -o /tmp/grocy.zip -d /opt/grocy/
+
+  - name: Add the grocy conf
+    copy:
+      src: files/config.php
+      dest: /opt/grocy/data/config.php
+
+  - name: Chown grocy
+    file:
+      path: /opt/grocy
+      recurse: yes
+      owner: www-data
+      group: www-data
+
+  - name: remove default nginx
+    file:
+      path: /etc/nginx/sites-enabled/default
+      state: absent
+
+  - name: Add the nginx conf
+    copy:
+      src: files/nginx.conf
+      dest: /etc/nginx/sites-enabled/grocy.local.conf
+
+  - name: restart nginx
+    ansible.builtin.systemd:
+      state: restarted
+      name: nginx
